@@ -1,0 +1,304 @@
+package BZB05;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+
+
+
+/**
+ * 封装的sql方法
+ * @author Ernest
+ *
+ */
+public class SQL_INandUP {
+	
+	/**
+	 * 数据库的插入方法返回自增ID
+	 * 插入元素含有Data需要转成string类型
+	 * @param conn 数据库连接
+	 * @param str1表名
+	 * @param str2结构
+	 * @param m insert的字段map格式
+	 * @return 返回影响条数
+	 * @throws SQLException
+	 */
+	public static int INSERT_sql(Connection conn ,String table,Map<String, Object> m) throws SQLException{
+		
+		String string1= "";
+		String string2= "";
+		String string= "";
+		int i=0;
+		for(String key : m.keySet()){
+			if(i==0){
+				string1 = string1+key;
+				string2 = string2+"?";
+			}else{
+				string1 = string1+","+key;
+				string2 = string2+",?";
+			}
+			i++;
+		}
+		string = " ("+string1+") values ("+string2+") ";
+		String sql = "INSERT INTO "+table+" "+string;
+		
+		PreparedStatement prest=null;
+		prest = conn.prepareStatement(sql,PreparedStatement.RETURN_GENERATED_KEYS);
+		int j=0;
+		try{
+			for(String key : m.keySet()){
+				prest.setObject(j+1,m.get(key));
+				j++;
+			}
+			int a = prest.executeUpdate();
+			
+//			原来返回自增id		
+//			ResultSet rs = prest.getGeneratedKeys();
+//			if(rs.next());
+//			
+//			rs.getInt(1);
+			return a;
+		}finally{
+			if(prest!=null){
+				prest.close();
+			}
+			
+		}
+		
+		
+		
+	}
+
+	/**
+	 * update封装的只能实现单个数据库表的修改date需要写成要求各格式的String类型
+	 * @param conn 数据库连接
+	 * @param table 数据库表
+	 * @param where where条件
+	 * @param m update的字段以map格式
+	 * @return 返回影响了几条语句
+	 * @throws SQLException
+	 */
+
+	public static int UPDATA_sql(Connection conn ,String table,String where,Map<String , Object> m) throws SQLException{
+		
+		String string1="";
+		
+		String string = "";
+		int i=0;
+		for(String key : m.keySet()){
+			if(i==0){
+				string1 = string1+key+"=?";
+			}else{
+				string1 = string1+","+key+"=?";
+			}
+			i++;
+		}	
+		string = string1;
+		String sql = "UPDATE "+table+" set "+string+" where "+where;
+		PreparedStatement prest=null;
+		try{
+			prest=conn.prepareStatement(sql);
+			int j=0;
+			for(String key : m.keySet()){
+				prest.setObject(j+1,m.get(key));
+				j++;
+			}
+			
+			int a= prest.executeUpdate();
+			return a;
+		}finally{
+			if(prest!=null){
+				prest.close();
+			}
+		}
+		
+	};
+	
+	/**
+	 * 删除
+	 * @param conn
+	 * @param table
+	 * @param where
+	 * @return 影响的条数
+	 * @throws SQLException
+	 */
+	public static int DELETE_sql(Connection conn ,String table,String where) throws SQLException{
+		String sql = "DELETE From "+table+" where "+where;
+		PreparedStatement prest=null;
+		try {
+			prest = conn.prepareStatement(sql);
+			int a = prest.executeUpdate();
+			return a;
+		} finally {
+			if(prest!=null){
+				prest.close();
+			}
+		}
+	};
+	
+	
+	/**
+	 * 批量插入500条一提交（应用于人员大量导入）
+	 * @param prest 
+	 * @param conn 数据库连接
+	 * @param table 数据库表
+	 * @param list List<Map<String,Object>>需要插入的数据
+	 * @return
+	 * @throws SQLException
+	 */
+	public static boolean BatchInsert_sql(PreparedStatement prest,Connection conn,String table,List<Map<String,Object>> list) throws SQLException{
+		String  str = "INSERT INTO "+table+" ";
+		String str1 = "";
+		String str2 = "";
+		boolean falge2 =false; 
+		int i = 0;
+		boolean falge = true;
+		if(list==null){
+			return false;
+		}
+		if(list.size()>0){
+			if(falge){
+				Map<String,Object> map= list.get(0);
+				for(String key : map.keySet()){
+					if(i==0){
+						str1 = str1+key;
+						str2 = str2+"?";
+					}else{
+						str1 = str1+","+key;
+						str2 = str2+",?";
+					}
+					i++;
+				}
+				str += " ("+str1+") values ("+str2+") ";
+//				System.out.println(str);
+				prest = conn.prepareStatement(str);
+				falge=false;
+			}
+			if(!falge){
+				int num = 500;
+				for(int j=0;j<list.size();j++){
+					Map<String ,Object> map = list.get(j);
+					int l=0;
+					for(String key : map.keySet()){
+						prest.setObject(l+1,map.get(key));
+						l++;
+					}
+					prest.addBatch();
+					if(j==num){
+						prest.executeBatch();
+						conn.commit();
+						num+=500;
+					}
+				}
+				prest.executeBatch();
+				conn.commit();
+//				for(int k=0;k<a.length;k++){
+//					System.out.println(a[k]);
+//				}
+				falge2=true;
+			}
+			
+			return falge2;
+		}else{//空list
+			return false;
+		}
+
+	};
+	
+	/**
+	 * 根据主键（或某字段批量修改数据）500条一提交(应用于人员导入)
+	 * @param conn 数据库连接
+	 * @param prest
+	 * @param table 表名
+	 * @param where 字段名称
+	 * @param list 数据
+	 * @return
+	 * @throws SQLException
+	 */
+	public static boolean BatchUpdate_sql(Connection conn, PreparedStatement prest,String table,String where,List<Map<String , Object>> list) throws SQLException{
+		int maxIndex = 0;
+		boolean falge = true;
+		boolean falge1 = false;
+		String string1="";
+		
+		String string = "";
+		int i=0;
+		if(list==null){
+			return false;
+		}
+		if(list.size()>0){
+			Map<String,Object> m= list.get(0);
+			for(String key : m.keySet()){
+				if(!where.equals(key)){
+					if(i==0){
+						string1 = string1+key+"=?";
+					}else{
+						string1 = string1+","+key+"=?";
+					}
+					i++;
+				}
+				
+			}	
+			string = string1;
+			String sql = "UPDATE "+table+" set "+string+" where "+where+"=?";
+			prest=conn.prepareStatement(sql);
+			falge=false;
+			maxIndex = i+1;
+		}else{
+			return false;
+		}
+		if(!falge){
+			int num=500;
+			for(int k=0;k<list.size();k++){
+				Map<String , Object> map = list.get(k);
+				int j=0;
+				for(String key : map.keySet()){
+					if(!where.equals(key)){
+						prest.setObject(j+1,map.get(key));
+						j++;
+					}else{
+						prest.setObject(maxIndex,map.get(key));
+					}
+				}
+				prest.addBatch();
+				if(k==num){
+					prest.executeBatch();
+					conn.commit();
+					num+=500;
+					
+				}
+			}
+			prest.executeBatch();
+			conn.commit();
+			falge1=true;
+		}
+		return falge1;
+	
+		
+	};
+	
+	
+	/**
+	 * 传入别名的map取别名拼接
+	 * @param map
+	 * @return 别名字符串
+	 */
+	public static String getSelectAlias(Map<String,String> map){
+		String Bunch = "";
+		int i =0;
+		for(String key:map.keySet()){
+			
+			if(i==0){
+				Bunch += key+" as "+map.get(key)+" ";
+			}else{
+				Bunch = Bunch+","+key+" as "+map.get(key)+" ";
+			}
+			i++;
+		}
+		return Bunch;
+	};
+	
+}
